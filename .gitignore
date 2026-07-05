@@ -1,0 +1,9 @@
+# Compilados / cache de QML
+*.qmlc
+*.jsc
+.qmlcache/
+
+# Basura del sistema
+.DS_Store
+*~
+*.swp

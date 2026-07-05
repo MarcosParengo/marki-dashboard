@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "org.marki.dashboard",
+        "Name": "Dashboard",
+        "Description": "Reloj de panel con dashboard por pestañas (calendario, media, performance, workspaces)",
+        "Icon": "view-calendar-day",
+        "Category": "Date and Time",
+        "Authors": [
+            {
+                "Name": "marki",
+                "Email": "marcos.parengo@lebane.app"
+            }
+        ],
+        "License": "MIT",
+        "Version": "0.1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
