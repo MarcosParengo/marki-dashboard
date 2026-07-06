@@ -41,9 +41,8 @@ Item {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                border.width: current ? 2 : 1
-                border.color: current ? Kirigami.Theme.highlightColor
-                                      : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                border.width: current ? 2 : 0
+                border.color: current ? Kirigami.Theme.textColor : "transparent"
 
                 // Modelo de ventanas de este escritorio
                 TaskManager.TasksModel {
@@ -61,8 +60,8 @@ Item {
                     PC3.Label {
                         Layout.fillWidth: true
                         text: (vdInfo.desktopNames[deskCard.index] || i18n("Escritorio %1", deskCard.index + 1))
-                        font.bold: true
-                        color: deskCard.current ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        font.weight: Font.DemiBold
+                        color: Kirigami.Theme.textColor
                         elide: Text.ElideRight
 
                         MouseArea {
