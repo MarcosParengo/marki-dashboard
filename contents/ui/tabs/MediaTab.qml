@@ -14,12 +14,23 @@ Item {
     property string artist: ""
     property string album: ""
     property string artUrl: ""
+    property string playerName: ""
     property real length: 0
     property real position: 0
 
     property var players: []
     property string selectedPlayer: ""
     readonly property string targetPlayer: selectedPlayer.length ? selectedPlayer : "playerctld"
+
+    property bool shuffle: false
+    property string loop: "None"
+    property real volume: 0
+
+    // Player a mostrar en el indicador (el fijado, o el primero real)
+    readonly property string displayPlayer: selectedPlayer.length ? selectedPlayer
+                                          : (players.length ? players[0] : playerName)
+    // Duración válida (evita basura de streams en vivo)
+    readonly property bool hasDuration: length > 0 && length < 86400
 
     readonly property bool playing: status === "Playing"
     readonly property bool hasPlayer: title.length > 0 || artist.length > 0
@@ -31,6 +42,12 @@ Item {
         const s = Math.floor(sec) % 60;
         const m = Math.floor(sec / 60);
         return m + ":" + (s < 10 ? "0" + s : s);
+    }
+    function appName(p) {
+        const base = (p || "").split(".")[0];
+        if (base === "plasma-browser-integration") return "Navegador";
+        if (!base.length) return "";
+        return base.charAt(0).toUpperCase() + base.slice(1);
     }
 
     onPlayersChanged: {
@@ -44,37 +61,36 @@ Item {
         connectedSources: []
         onNewData: (source, data) => {
             const out = (data["stdout"] || "");
-            if (source.indexOf(" -l") !== -1) {
+            const s = source;
+            if (s.indexOf(" -l") !== -1) {
                 const list = out.trim();
                 root.players = list.length ? list.split("\n") : [];
-                exec.disconnectSource(source);
-                return;
-            }
-            if (source.indexOf("position") !== -1) {
+            } else if (s.endsWith("position")) {
                 const pos = parseFloat(out.trim());
                 if (!isNaN(pos)) root.position = pos;
-                exec.disconnectSource(source);
-                return;
-            }
-            if (source.indexOf("metadata") === -1) {
-                exec.disconnectSource(source);
-                return;
-            }
-            const meta = out.replace(/\n$/, "");
-            if (data["exit code"] !== 0 || meta.length === 0) {
-                root.title = "";
-                root.artist = "";
-                root.status = "Stopped";
-                root.length = 0;
-            } else {
-                const p = meta.split(root.sep);
-                root.status = p[0] || "Stopped";
-                root.title = p[1] || "";
-                root.artist = p[2] || "";
-                root.album = p[3] || "";
-                root.artUrl = p[4] || "";
-                const len = parseFloat(p[5]);
-                root.length = isNaN(len) ? 0 : len / 1e6;
+            } else if (s.endsWith("shuffle")) {
+                root.shuffle = out.trim() === "On";
+            } else if (s.endsWith("loop")) {
+                const l = out.trim();
+                if (l.length) root.loop = l;
+            } else if (s.endsWith("volume")) {
+                const v = parseFloat(out.trim());
+                if (!isNaN(v)) root.volume = v;
+            } else if (s.indexOf("metadata") !== -1) {
+                const meta = out.replace(/\n$/, "");
+                if (data["exit code"] !== 0 || meta.length === 0) {
+                    root.title = ""; root.artist = ""; root.status = "Stopped"; root.length = 0;
+                } else {
+                    const p = meta.split(root.sep);
+                    root.status = p[0] || "Stopped";
+                    root.title = p[1] || "";
+                    root.artist = p[2] || "";
+                    root.album = p[3] || "";
+                    root.artUrl = p[4] || "";
+                    const len = parseFloat(p[5]);
+                    root.length = isNaN(len) ? 0 : len / 1e6;
+                    root.playerName = p[6] || "";
+                }
             }
             exec.disconnectSource(source);
         }
@@ -86,18 +102,30 @@ Item {
         exec.connectSource(pctl("metadata --format '{{status}}" + sep +
                            "{{title}}" + sep + "{{artist}}" + sep +
                            "{{album}}" + sep + "{{mpris:artUrl}}" + sep +
-                           "{{mpris:length}}'"));
+                           "{{mpris:length}}" + sep + "{{playerName}}'"));
     }
     function pollPosition() { exec.connectSource(pctl("position")); }
+    function pollState() {
+        exec.connectSource(pctl("shuffle"));
+        exec.connectSource(pctl("loop"));
+        exec.connectSource(pctl("volume"));
+    }
     function pollPlayers() { exec.connectSource("playerctl -l"); }
 
-    Component.onCompleted: { pollPlayers(); poll(); }
+    function cycleLoop() {
+        const next = loop === "None" ? "Track" : (loop === "Track" ? "Playlist" : "None");
+        run("loop " + next);
+        loop = next;
+    }
+
+    Component.onCompleted: { pollPlayers(); poll(); pollState(); }
     Timer {
         interval: 1000; running: true; repeat: true
         property int tick: 0
         onTriggered: {
             root.poll();
             root.pollPosition();
+            if (tick % 2 === 0) root.pollState();
             if (tick % 3 === 0) root.pollPlayers();
             tick++;
         }
@@ -125,25 +153,39 @@ Item {
     // ---- Reproductor ----
     ColumnLayout {
         anchors.fill: parent
-        spacing: Kirigami.Units.largeSpacing
+        spacing: Kirigami.Units.smallSpacing
         visible: root.hasPlayer
 
-        // Tabs de players arriba (si hay más de uno)
+        // Fila superior: app + tabs de players
         RowLayout {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
-            Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.smallSpacing
-            visible: root.players.length > 1
 
+            Kirigami.Icon {
+                source: root.displayPlayer.split(".")[0]
+                fallback: "audio-x-generic"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            }
+            PC3.Label {
+                text: root.appName(root.displayPlayer)
+                font.weight: Font.DemiBold
+                opacity: 0.8
+                elide: Text.ElideRight
+            }
+
+            Item { Layout.fillWidth: true }
+
+            // Selector de players (si hay más de uno)
             Repeater {
-                model: root.players
+                model: root.players.length > 1 ? root.players : []
                 delegate: Rectangle {
                     id: tab
                     required property string modelData
                     readonly property bool current: root.selectedPlayer === modelData
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 2
-                    Layout.preferredHeight: Kirigami.Units.gridUnit * 2
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 1.8
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 1.8
                     radius: Kirigami.Units.cornerRadius * 1.6
                     color: tab.current ? Qt.rgba(Kirigami.Theme.textColor.r,
                                                  Kirigami.Theme.textColor.g,
@@ -165,19 +207,19 @@ Item {
             }
         }
 
-        // Fila principal: thumbnail | info+controles+timeline | gif
+        // Fila principal
         RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: Kirigami.Units.largeSpacing
 
-            // Thumbnail (izquierda, cuadrado y capado)
+            // Thumbnail (izquierda)
             Item {
                 id: coverItem
+                Layout.alignment: Qt.AlignVCenter
                 Layout.fillHeight: true
                 Layout.maximumHeight: Kirigami.Units.gridUnit * 9
                 Layout.preferredWidth: height
-                Layout.alignment: Qt.AlignVCenter
                 readonly property real coverRadius: Kirigami.Units.cornerRadius * 2
 
                 Rectangle {
@@ -217,18 +259,16 @@ Item {
                 }
             }
 
-            // Centro: info + controles + timeline
+            // Centro: info + letras + controles + timeline + volumen
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 spacing: Kirigami.Units.smallSpacing
 
-                Item { Layout.fillHeight: true }
-
                 C.Marquee {
                     Layout.fillWidth: true
                     text: root.title
-                    pixelSize: Kirigami.Units.gridUnit * 1.4
+                    pixelSize: Kirigami.Units.gridUnit * 1.3
                 }
                 PC3.Label {
                     Layout.fillWidth: true
@@ -238,21 +278,28 @@ Item {
                     font.weight: Font.Medium
                     elide: Text.ElideRight
                 }
-                PC3.Label {
+
+                // Letras sincronizadas
+                C.Lyrics {
                     Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    text: root.album
-                    opacity: 0.6
-                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                    elide: Text.ElideRight
-                    visible: root.album.length > 0
+                    Layout.fillHeight: true
+                    title: root.title
+                    artist: root.artist
+                    album: root.album
+                    duration: root.length
+                    position: root.position
                 }
 
-                // Controles
+                // Controles: shuffle | prev | play | next | repeat
                 RowLayout {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.topMargin: Kirigami.Units.smallSpacing
-                    spacing: Kirigami.Units.largeSpacing
+                    spacing: Kirigami.Units.smallSpacing
+
+                    PC3.ToolButton {
+                        icon.name: "media-playlist-shuffle"
+                        opacity: root.shuffle ? 1 : 0.4
+                        onClicked: root.run("shuffle toggle")
+                    }
                     PC3.ToolButton {
                         icon.name: "media-skip-backward"
                         onClicked: root.run("previous")
@@ -265,63 +312,29 @@ Item {
                         icon.name: "media-skip-forward"
                         onClicked: root.run("next")
                     }
+                    PC3.ToolButton {
+                        icon.name: root.loop === "Track" ? "media-playlist-repeat-song"
+                                                          : "media-playlist-repeat"
+                        opacity: root.loop === "None" ? 0.4 : 1
+                        onClicked: root.cycleLoop()
+                    }
                 }
 
                 // Timeline
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.topMargin: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
-                    visible: root.length > 0
+                    visible: root.hasDuration
 
                     PC3.Label {
                         text: root.fmtTime(root.position)
                         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         opacity: 0.8
                     }
-                    Item {
-                        id: seek
+                    C.SeekBar {
                         Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        implicitHeight: Kirigami.Units.gridUnit
-                        property real frac: 0
-                        property bool dragging: false
-
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width
-                            height: Kirigami.Units.smallSpacing + 2
-                            radius: height / 2
-                            color: Qt.rgba(Kirigami.Theme.textColor.r,
-                                           Kirigami.Theme.textColor.g,
-                                           Kirigami.Theme.textColor.b, 0.2)
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: parent.width * Math.max(0, Math.min(1, seek.frac))
-                                radius: parent.radius
-                                color: Kirigami.Theme.textColor
-                            }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            function apply(mx) { seek.frac = Math.max(0, Math.min(1, mx / width)); }
-                            onPressed: (m) => { seek.dragging = true; apply(m.x); }
-                            onPositionChanged: (m) => { if (pressed) apply(m.x); }
-                            onReleased: {
-                                seek.dragging = false;
-                                if (root.length > 0) root.run("position " + (seek.frac * root.length));
-                            }
-                        }
-                        Connections {
-                            target: root
-                            function onPositionChanged() {
-                                if (!seek.dragging)
-                                    seek.frac = root.length > 0 ? root.position / root.length : 0;
-                            }
-                        }
+                        value: root.length > 0 ? root.position / root.length : 0
+                        onSeek: frac => { if (root.length > 0) root.run("position " + (frac * root.length)); }
                     }
                     PC3.Label {
                         text: "-" + root.fmtTime(Math.max(0, root.length - root.position))
@@ -330,15 +343,31 @@ Item {
                     }
                 }
 
-                Item { Layout.fillHeight: true }
+                // Volumen
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Kirigami.Icon {
+                        source: root.volume <= 0 ? "audio-volume-muted" : "audio-volume-high"
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        opacity: 0.8
+                    }
+                    C.SeekBar {
+                        Layout.fillWidth: true
+                        value: root.volume
+                        onSeek: frac => root.run("volume " + frac.toFixed(2))
+                    }
+                }
             }
 
-            // Gif (derecha, capado)
+            // Gif (derecha)
             AnimatedImage {
+                Layout.alignment: Qt.AlignVCenter
                 Layout.fillHeight: true
                 Layout.maximumHeight: Kirigami.Units.gridUnit * 8
                 Layout.preferredWidth: height
-                Layout.alignment: Qt.AlignVCenter
                 source: Qt.resolvedUrl("../assets/blackcat.gif")
                 fillMode: Image.PreserveAspectFit
                 playing: true
