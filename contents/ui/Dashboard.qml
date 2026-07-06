@@ -10,10 +10,10 @@ Item {
     property date now: new Date()
 
     // Tamaño del popup del dashboard
-    Layout.preferredWidth: Kirigami.Units.gridUnit * 34
-    Layout.preferredHeight: Kirigami.Units.gridUnit * 26
-    Layout.minimumWidth: Kirigami.Units.gridUnit * 28
-    Layout.minimumHeight: Kirigami.Units.gridUnit * 22
+    Layout.preferredWidth: Kirigami.Units.gridUnit * 38
+    Layout.preferredHeight: Kirigami.Units.gridUnit * 20
+    Layout.minimumWidth: Kirigami.Units.gridUnit * 32
+    Layout.minimumHeight: Kirigami.Units.gridUnit * 17
 
     ColumnLayout {
         anchors.fill: parent
@@ -50,6 +50,7 @@ Item {
             id: swipe
             Layout.fillWidth: true
             Layout.fillHeight: true
+            clip: true
             currentIndex: tabBar.currentIndex
 
             Tabs.DashboardTab { now: root.now }

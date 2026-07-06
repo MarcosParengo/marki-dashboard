@@ -1,19 +1,19 @@
 import QtQuick
 import org.kde.kirigami as Kirigami
 
-// Tarjeta con esquinas redondeadas al estilo del dashboard de caelestia.
+// Tarjeta con esquinas muy redondeadas, plana y sin borde, al estilo del
+// dashboard de caelestia (superficie sólida "surfaceContainer").
 Rectangle {
     default property alias content: inner.data
     property real padding: Kirigami.Units.largeSpacing
 
-    radius: Kirigami.Units.cornerRadius * 2
-    color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
-                   Kirigami.Theme.backgroundColor.g,
-                   Kirigami.Theme.backgroundColor.b, 0.55)
-    border.width: 1
-    border.color: Qt.rgba(Kirigami.Theme.textColor.r,
-                          Kirigami.Theme.textColor.g,
-                          Kirigami.Theme.textColor.b, 0.08)
+    // Fondo gris translúcido (deja pasar el blur del popup), como la
+    // pestaña seleccionada del tema de Plasma.
+    radius: Kirigami.Units.cornerRadius * 1.6
+    color: Qt.rgba(Kirigami.Theme.textColor.r,
+                   Kirigami.Theme.textColor.g,
+                   Kirigami.Theme.textColor.b, 0.1)
+    border.width: 0
 
     Item {
         id: inner

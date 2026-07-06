@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.kirigami as Kirigami
@@ -42,9 +43,12 @@ Item {
         }
     }
 
-    function run(cmd) { exec.connectSource("playerctl " + cmd); }
+    // -p playerctld sigue siempre al reproductor activo
+    readonly property string pctl: "playerctl -p playerctld "
+
+    function run(cmd) { exec.connectSource(pctl + cmd); }
     function poll() {
-        exec.connectSource("playerctl metadata --format '{{status}}" + sep +
+        exec.connectSource(pctl + "metadata --format '{{status}}" + sep +
                            "{{title}}" + sep + "{{artist}}" + sep +
                            "{{album}}" + sep + "{{mpris:artUrl}}'");
     }
@@ -77,26 +81,39 @@ Item {
         spacing: Kirigami.Units.largeSpacing * 2
         visible: root.hasPlayer
 
-        // Carátula
+        // Carátula (recortada con el mismo radius que la card)
         C.Card {
+            id: coverCard
             Layout.preferredWidth: root.height * 0.9
             Layout.fillHeight: true
             padding: 0
-            clip: true
 
             Image {
+                id: cover
                 anchors.fill: parent
                 source: root.artUrl
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                visible: status === Image.Ready
+                visible: false
+            }
+            Rectangle {
+                id: coverMask
+                anchors.fill: parent
+                radius: coverCard.radius
+                visible: false
+            }
+            OpacityMask {
+                anchors.fill: parent
+                source: cover
+                maskSource: coverMask
+                visible: cover.status === Image.Ready
             }
             Kirigami.Icon {
                 anchors.centerIn: parent
                 source: "audio-x-generic"
                 width: Kirigami.Units.iconSizes.large
                 height: width
-                visible: root.artUrl.length === 0
+                visible: cover.status !== Image.Ready
                 opacity: 0.5
             }
         }
@@ -109,13 +126,10 @@ Item {
 
             Item { Layout.fillHeight: true }
 
-            PC3.Label {
+            C.Marquee {
                 Layout.fillWidth: true
                 text: root.title
-                font.pixelSize: Kirigami.Units.gridUnit * 1.4
-                font.bold: true
-                elide: Text.ElideRight
-                wrapMode: Text.NoWrap
+                pixelSize: Kirigami.Units.gridUnit * 1.4
             }
             PC3.Label {
                 Layout.fillWidth: true

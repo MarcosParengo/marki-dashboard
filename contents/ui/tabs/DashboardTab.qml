@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import org.kde.plasma.components 3.0 as PC3
 import org.kde.plasma.plasma5support as P5Support
 import org.kde.ksysguard.sensors as Sensors
-import org.kde.plasma.workspace.calendar as Calendar
 import org.kde.kirigami as Kirigami
 import "../components" as C
 
@@ -25,6 +24,8 @@ Item {
     property string kernel: ""
     property string distro: ""
     property string uptime: ""
+    property string wm: ""
+    property string facePath: ""
     property real volume: 0
 
     P5Support.DataSource {
@@ -40,6 +41,10 @@ Item {
                 root.distro = m ? m[1] : out;
             } else if (source.indexOf("uptime") !== -1)
                 root.uptime = out;
+            else if (source.indexOf("XDG_CURRENT_DESKTOP") !== -1)
+                root.wm = out === "KDE" ? "KDE Plasma" : out;
+            else if (source.indexOf(".face") !== -1)
+                root.facePath = out;
             else if (source.indexOf("wpctl") !== -1) {
                 const m = out.match(/Volume:\s*([0-9.]+)/);
                 root.volume = m ? parseFloat(m[1]) : 0;
@@ -56,6 +61,8 @@ Item {
     Component.onCompleted: {
         exec.connectSource("uname -r");
         exec.connectSource("cat /etc/os-release");
+        exec.connectSource("printf %s \"$XDG_CURRENT_DESKTOP\"");
+        exec.connectSource("sh -c 'test -f \"$HOME/.face\" && printf \"file://%s/.face\" \"$HOME\"'");
         poll();
     }
 
@@ -66,124 +73,164 @@ Item {
         onTriggered: root.poll()
     }
 
-    // ---------- Layout ----------
+    // ---------- Layout: regiones anidadas estilo caelestia ----------
     RowLayout {
         anchors.fill: parent
         spacing: Kirigami.Units.largeSpacing
 
-        // ===== Columna izquierda =====
+        // ===== Zona principal (izquierda + centro) =====
         ColumnLayout {
-            Layout.fillHeight: true
             Layout.fillWidth: true
-            Layout.horizontalStretchFactor: 42
-            Layout.minimumWidth: Kirigami.Units.gridUnit * 10
+            Layout.fillHeight: true
             spacing: Kirigami.Units.largeSpacing
 
-            // Reloj + fecha
-            C.Card {
+            // ---- Fila superior: Clima + Usuario ----
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Kirigami.Units.gridUnit * 6
+                Layout.fillHeight: false
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 5
+                Layout.maximumHeight: Kirigami.Units.gridUnit * 5
+                spacing: Kirigami.Units.largeSpacing
 
-                ColumnLayout {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 0
+                C.Card {
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+                    Layout.fillHeight: true
 
-                    PC3.Label {
-                        text: Qt.formatDateTime(root.now, "hh:mm")
-                        font.pixelSize: Kirigami.Units.gridUnit * 2.6
-                        font.bold: true
-                        color: Kirigami.Theme.highlightColor
-                    }
-                    PC3.Label {
-                        text: Qt.formatDateTime(root.now, "dddd")
-                        font.capitalization: Font.Capitalize
-                        opacity: 0.9
-                    }
-                    PC3.Label {
-                        text: Qt.formatDateTime(root.now, "d MMM yyyy")
-                        opacity: 0.7
-                        font: Kirigami.Theme.smallFont
+                    C.WeatherCard { anchors.fill: parent }
+                }
+
+                C.Card {
+                    id: userCard
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    C.UserCard {
+                        anchors.fill: parent
+                        distro: root.distro
+                        wm: root.wm
+                        uptime: root.uptime
+                        facePath: Qt.resolvedUrl("../assets/avatar.png")
+                        // Mismo redondeo que el thumbnail (concéntrico con la card)
+                        imageRadius: Math.max(Kirigami.Units.cornerRadius,
+                                              userCard.radius - userCard.padding)
                     }
                 }
             }
 
-            // Info del sistema
-            C.Card {
+            // ---- Fila inferior: Reloj + Calendario + Recursos ----
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                spacing: Kirigami.Units.largeSpacing
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    spacing: Kirigami.Units.smallSpacing
+                // Reloj vertical (hora ••• minutos)
+                C.Card {
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                    Layout.fillHeight: true
 
-                    InfoRow { icon: "computer"; label: root.distro }
-                    InfoRow { icon: "utilities-terminal"; label: "Linux " + root.kernel }
-                    InfoRow { icon: "chronometer"; label: root.uptime }
-                    Item { Layout.fillHeight: true }
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 0
+
+                        Item { Layout.fillHeight: true }
+
+                        PC3.Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Qt.formatDateTime(root.now, "hh")
+                            font.pixelSize: Kirigami.Units.gridUnit * 2.2
+                            font.weight: Font.DemiBold
+                            color: Kirigami.Theme.textColor
+                            lineHeight: 0.95
+                        }
+                        PC3.Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.topMargin: -Kirigami.Units.smallSpacing
+                            Layout.bottomMargin: -Kirigami.Units.smallSpacing
+                            text: "•••"
+                            font.pixelSize: Kirigami.Units.gridUnit
+                            font.weight: Font.DemiBold
+                            color: Kirigami.Theme.textColor
+                            opacity: 0.7
+                        }
+                        PC3.Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Qt.formatDateTime(root.now, "mm")
+                            font.pixelSize: Kirigami.Units.gridUnit * 2.2
+                            font.weight: Font.DemiBold
+                            color: Kirigami.Theme.textColor
+                            lineHeight: 0.95
+                        }
+                        PC3.Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.topMargin: Kirigami.Units.smallSpacing
+                            text: Qt.formatDateTime(root.now, "ddd, d")
+                            opacity: 0.7
+                            font: Kirigami.Theme.smallFont
+                        }
+
+                        Item { Layout.fillHeight: true }
+                    }
                 }
-            }
 
-            // Barras CPU / RAM / Volumen
-            C.Card {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Kirigami.Units.gridUnit * 8
+                // Calendario
+                C.Card {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
 
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: Kirigami.Units.largeSpacing * 2
-
-                    C.VerticalMeter {
-                        label: "CPU"
-                        value: (cpuSensor.value || 0) / 100
-                        fillColor: Kirigami.Theme.highlightColor
+                    C.CalendarGrid {
+                        anchors.fill: parent
+                        today: root.now
                     }
-                    C.VerticalMeter {
-                        label: "RAM"
-                        value: (memSensor.value || 0) / 100
-                        fillColor: Kirigami.Theme.positiveTextColor
-                    }
-                    C.VerticalMeter {
-                        label: "VOL"
-                        value: root.volume
-                        fillColor: Kirigami.Theme.neutralTextColor
+                }
+
+                // Recursos CPU / RAM / VOL
+                C.Card {
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+                    Layout.fillHeight: true
+
+                    RowLayout {
+                        anchors.fill: parent
+                        spacing: Kirigami.Units.smallSpacing
+
+                        C.VerticalMeter {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            label: "CPU"
+                            value: (cpuSensor.value || 0) / 100
+                            fillColor: Kirigami.Theme.textColor
+                        }
+                        C.VerticalMeter {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            label: "RAM"
+                            value: (memSensor.value || 0) / 100
+                            fillColor: Kirigami.Theme.textColor
+                        }
+                        C.VerticalMeter {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            label: "VOL"
+                            value: root.volume
+                            fillColor: Kirigami.Theme.textColor
+                        }
                     }
                 }
             }
         }
 
-        // ===== Columna derecha: calendario =====
+        // ===== Media (columna alta a la derecha) =====
         C.Card {
-            Layout.fillWidth: true
+            id: mediaCard
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 8
             Layout.fillHeight: true
-            Layout.horizontalStretchFactor: 58
-            Layout.minimumWidth: Kirigami.Units.gridUnit * 13
 
-            Calendar.MonthView {
+            C.MediaCard {
                 anchors.fill: parent
-                today: root.now
+                // Redondeo concéntrico con la card (radio_card − padding),
+                // con piso en cornerRadius para que nunca quede cuadrado.
+                coverRadius: Math.max(Kirigami.Units.cornerRadius,
+                                      mediaCard.radius - mediaCard.padding)
             }
-        }
-    }
-
-    // Fila de info con icono
-    component InfoRow: RowLayout {
-        id: infoRow
-        property string icon: ""
-        property string label: ""
-        Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
-        visible: infoRow.label.length > 0
-
-        Kirigami.Icon {
-            source: infoRow.icon
-            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-            Layout.preferredHeight: Kirigami.Units.iconSizes.small
-        }
-        PC3.Label {
-            text: infoRow.label
-            elide: Text.ElideRight
-            Layout.fillWidth: true
         }
     }
 }
