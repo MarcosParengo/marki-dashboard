@@ -115,12 +115,7 @@ Item {
         }
     }
 
-    onCurrentIndexChanged: {
-        if (currentIndex >= 0)
-            syncedList.positionViewAtIndex(currentIndex, ListView.Center);
-    }
-
-    // Sincronizadas
+    // Sincronizadas (auto-centrado animado vía highlightRange)
     ListView {
         id: syncedList
         anchors.fill: parent
@@ -129,17 +124,30 @@ Item {
         interactive: false
         model: root.lines
         spacing: Kirigami.Units.smallSpacing
+
+        currentIndex: root.currentIndex
+        highlightRangeMode: ListView.StrictlyEnforceRange
+        preferredHighlightBegin: height * 0.22
+        preferredHighlightEnd: height * 0.36
+        highlightMoveDuration: 450
+        highlightMoveVelocity: -1
+        highlight: Item {}
+
         delegate: PC3.Label {
             required property int index
             required property var modelData
+            readonly property bool active: index === root.currentIndex
             width: ListView.view.width
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             text: modelData.text
             color: Kirigami.Theme.textColor
-            opacity: index === root.currentIndex ? 1 : 0.35
-            font.weight: index === root.currentIndex ? Font.DemiBold : Font.Normal
-            Behavior on opacity { NumberAnimation { duration: 200 } }
+            opacity: active ? 1 : 0.3
+            font.weight: active ? Font.DemiBold : Font.Normal
+            font.pixelSize: active ? Kirigami.Theme.defaultFont.pixelSize * 1.4
+                                   : Kirigami.Theme.defaultFont.pixelSize
+            Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+            Behavior on font.pixelSize { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
         }
     }
 
@@ -158,7 +166,7 @@ Item {
             wrapMode: Text.WordWrap
             text: modelData
             color: Kirigami.Theme.textColor
-            opacity: 0.75
+            opacity: 0.92
         }
     }
 

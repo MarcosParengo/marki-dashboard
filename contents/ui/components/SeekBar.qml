@@ -17,6 +17,12 @@ Item {
     onValueChanged: if (!dragging) frac = Math.max(0, Math.min(1, value))
     Component.onCompleted: frac = Math.max(0, Math.min(1, value))
 
+    // Progreso fluido entre actualizaciones (no al arrastrar)
+    Behavior on frac {
+        enabled: !root.dragging
+        NumberAnimation { duration: 900; easing.type: Easing.Linear }
+    }
+
     Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width
